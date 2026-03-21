@@ -1519,6 +1519,11 @@
 		"compile-src": "tsc -p ./src && node ./.vscode/package-src.js",
 		"compile-web": "tsc -p ./web && node ./.vscode/package-web.js",
 		"compile-web-debug": "tsc -p ./web && node ./.vscode/package-web.js debug",
+		"compile-backend": "tsc -p ./backend/tsconfig.json",
+		"prestart": "npx --yes kill-port 3000 2>nul || echo.",
+		"start": "npm run compile-src && npm run compile-web && npm run compile-backend && node -r ./out/backend/backend/register.js ./out/backend/backend/server.js",
+		"stop": "taskkill /F /FI \"WINDOWTITLE eq Git Graph*\" /IM node.exe 2>nul || npx kill-port 3000",
+		"start:dev": "ts-node -r ./backend/register.ts ./backend/server.ts",
 		"lint": "eslint -c .eslintrc.json --max-warnings 0 --ext .ts ./src ./tests ./web",
 		"package": "vsce package",
 		"package-and-install": "npm run package && node ./.vscode/install-package.js",
@@ -1526,17 +1531,22 @@
 		"test-and-report-coverage": "jest --verbose --coverage"
 	},
 	"dependencies": {
-		"iconv-lite": "0.5.0"
+		"express": "^4.18.2",
+		"iconv-lite": "0.5.0",
+		"ws": "^8.14.2"
 	},
 	"devDependencies": {
+		"@types/express": "^4.17.13",
 		"@types/jest": "26.0.19",
 		"@types/node": "8.10.62",
 		"@types/vscode": "1.38.0",
+		"@types/ws": "^7.4.7",
 		"@typescript-eslint/eslint-plugin": "4.10.0",
 		"@typescript-eslint/parser": "4.10.0",
 		"eslint": "7.15.0",
 		"jest": "26.6.3",
 		"ts-jest": "26.4.4",
+		"ts-node": "^10.9.2",
 		"typescript": "4.0.2",
 		"uglify-js": "3.10.0"
 	}

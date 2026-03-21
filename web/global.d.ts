@@ -2,22 +2,16 @@ import * as GG from '../out/types'; // Import types from back-end (requires `npm
 
 declare global {
 
-	/* Visual Studio Code API Types */
-
-	function acquireVsCodeApi(): {
-		getState: () => WebViewState | null,
-		postMessage: (message: GG.RequestMessage) => void,
-		setState: (state: WebViewState) => void
-	};
-
-
 	/* State Types */
 
 	type Config = GG.GitGraphViewConfig;
 
-	const initialState: GG.GitGraphViewInitialState;
-	const globalState: GG.DeepReadonly<GG.GitGraphViewGlobalState>;
-	const workspaceState: GG.DeepReadonly<GG.GitGraphViewWorkspaceState>;
+	// These three variables are set by index.html before out.min.js is loaded
+	// (fetched from GET /api/initialState).  Declaring them as `var` (instead
+	// of `const`) lets the bootstrap script assign them at runtime.
+	var initialState: GG.GitGraphViewInitialState;
+	var globalState: GG.DeepReadonly<GG.GitGraphViewGlobalState>;
+	var workspaceState: GG.DeepReadonly<GG.GitGraphViewWorkspaceState>;
 
 	type AvatarImageCollection = { [email: string]: string };
 

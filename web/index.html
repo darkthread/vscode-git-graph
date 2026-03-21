@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git Graph</title>
+    <link rel="stylesheet" type="text/css" href="/out.min.css">
+    <link rel="stylesheet" type="text/css" href="/theme.css">
+    <!-- Graph branch colours injected by server via /api/initialState -->
+</head>
+<body>
+    <div id="view" tabindex="-1">
+        <div id="controls">
+            <span id="repoControl"><span class="unselectable">Repo: </span><div id="repoDropdown" class="dropdown"></div></span>
+            <span id="branchControl"><span class="unselectable">Branches: </span><div id="branchDropdown" class="dropdown"></div></span>
+            <label id="showRemoteBranchesControl"><input type="checkbox" id="showRemoteBranchesCheckbox" tabindex="-1"><span class="customCheckbox"></span>Show Remote Branches</label>
+            <div id="findBtn" title="Find"></div>
+            <div id="terminalBtn" title="Open a Terminal for this Repository"></div>
+            <div id="settingsBtn" title="Repository Settings"></div>
+            <div id="fetchBtn"></div>
+            <div id="refreshBtn"></div>
+        </div>
+        <div id="content">
+            <div id="commitGraph"></div>
+            <div id="commitTable"></div>
+        </div>
+        <div id="footer"></div>
+    </div>
+    <div id="scrollShadow"></div>
+
+    <script>
+        // Fetch initial state from the backend before loading the main script.
+        // The three globals (initialState, globalState, workspaceState) are
+        // expected to exist synchronously when out.min.js starts executing, so
+        // we dynamically append the <script> tag only after the fetch resolves.
+        (function () {
+            fetch('/api/initialState')
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    window.initialState    = data.initialState;
+                    window.globalState     = data.globalState;
+                    window.workspaceState  = data.workspaceState;
+
+                    // Apply graph branch colour CSS variables injected by server
+                    if (data.colorVars) {
+                        var style = document.createElement('style');
+                        style.textContent = 'body{' + data.colorVars + '} ' + data.colorParams;
+                        document.head.appendChild(style);
+                    }
+
+                    var s = document.createElement('script');
+                    s.src = '/out.min.js';
+                    // The window 'load' event fires before this script is
+                    // dynamically injected, so we re-dispatch it once out.min.js
+                    // has parsed and registered its listener.
+                    s.onload = function() {
+                        window.dispatchEvent(new Event('load'));
+                    };
+                    document.body.appendChild(s);
+                })
+                .catch(function (err) {
+                    document.body.innerHTML =
+                        '<h2>Unable to load Git Graph</h2>' +
+                        '<p>Could not connect to the Git Graph backend: ' + err + '</p>';
+                });
+        })();
+    </script>
+</body>
+</html>
