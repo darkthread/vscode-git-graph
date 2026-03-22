@@ -165,6 +165,7 @@ app.MapGet("/api/initialState", (HttpContext context) =>
         defaultColumnVisibility = new { date = true, author = true, commit = true },
         dialogDefaults = new
         {
+            general = new { referenceInputSpaceSubstitution = (object?)null },
             addTag = new { pushToRemote = false, type = 1 },       // GitTagType.Annotated = 1
             applyStash = new { reinstateIndex = false },
             cherryPick = new { noCommit = false, recordOrigin = false },
