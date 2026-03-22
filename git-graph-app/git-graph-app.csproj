@@ -7,6 +7,6 @@
     <RootNamespace>git_graph</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="./media/*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="./media/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

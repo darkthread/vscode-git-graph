@@ -70,6 +70,13 @@ cp.exec('uglifyjs ' + path.join(MEDIA_DIRECTORY, OUTPUT_TMP_JS_FILE) + ' ' + (DE
 		console.log('');
 		if (stdout !== '') console.log(stdout);
 		fs.unlinkSync(path.join(MEDIA_DIRECTORY, OUTPUT_TMP_JS_FILE));
+		// Sync compiled output to git-graph-app/media/ for dotnet build
+		const appMediaDir = path.join('git-graph-app', 'media');
+		if (fs.existsSync(appMediaDir)) {
+			fs.copyFileSync(path.join(MEDIA_DIRECTORY, OUTPUT_MIN_JS_FILE), path.join(appMediaDir, OUTPUT_MIN_JS_FILE));
+			fs.copyFileSync(path.join(MEDIA_DIRECTORY, OUTPUT_MIN_CSS_FILE), path.join(appMediaDir, OUTPUT_MIN_CSS_FILE));
+			console.log('Synced compiled files to ' + appMediaDir);
+		}
 	}
 });
 

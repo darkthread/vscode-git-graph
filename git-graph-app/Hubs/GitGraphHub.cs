@@ -748,10 +748,10 @@ public class GitGraphHub : Hub<IGitGraphClient>
     private static string BuildDiffUrl(string repo, string fromHash, string toHash, string oldFilePath, string newFilePath)
     {
         return $"/diff?repo={Uri.EscapeDataString(repo)}" +
-               $"&from={Uri.EscapeDataString(fromHash)}" +
-               $"&to={Uri.EscapeDataString(toHash)}" +
-               $"&oldFile={Uri.EscapeDataString(oldFilePath)}" +
-               $"&newFile={Uri.EscapeDataString(newFilePath)}";
+               $"&fromHash={Uri.EscapeDataString(fromHash)}" +
+               $"&toHash={Uri.EscapeDataString(toHash)}" +
+               $"&oldPath={Uri.EscapeDataString(oldFilePath)}" +
+               $"&newPath={Uri.EscapeDataString(newFilePath)}";
     }
 
     private static string? BuildPullRequestUrl(PullRequestConfig config, string sourceOwner, string sourceRepo, string sourceBranch)

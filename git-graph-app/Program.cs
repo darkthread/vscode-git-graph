@@ -271,7 +271,7 @@ app.MapGet("/api/file", async (HttpContext context, string repo, string hash, st
 });
 
 // Return unified diff
-app.MapGet("/api/diff", async (HttpContext context, string repo, string from, string to, string oldFile, string newFile) =>
+app.MapGet("/api/diff", async (HttpContext context, string repo, string fromHash, string toHash, string oldPath, string newPath) =>
 {
     try
     {
@@ -282,10 +282,10 @@ app.MapGet("/api/diff", async (HttpContext context, string repo, string from, st
         var args = new List<string>
         {
             "-c", "color.ui=false",
-            "diff", from == to ? $"{from}^..{from}" : $"{from}..{to}",
-            "--", oldFile
+            "diff", fromHash == toHash ? $"{fromHash}^..{fromHash}" : $"{fromHash}..{toHash}",
+            "--", oldPath
         };
-        if (oldFile != newFile) args.Add(newFile);
+        if (oldPath != newPath) args.Add(newPath);
 
         var psi = new System.Diagnostics.ProcessStartInfo(exe.Path)
         {

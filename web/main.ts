@@ -3401,13 +3401,25 @@ window.addEventListener('load', () => {
 				}
 				break;
 			case 'viewDiff':
-				finishOrDisplayError(msg.error, 'Unable to View Diff');
+				if (msg.error !== null) {
+					finishOrDisplayError(msg.error, 'Unable to View Diff');
+				} else {
+					window.open(msg.url, '_blank');
+				}
 				break;
 			case 'viewDiffWithWorkingFile':
-				finishOrDisplayError(msg.error, 'Unable to View Diff with Working File');
+				if (msg.error !== null) {
+					finishOrDisplayError(msg.error, 'Unable to View Diff with Working File');
+				} else {
+					window.open(msg.url, '_blank');
+				}
 				break;
 			case 'viewFileAtRevision':
-				finishOrDisplayError(msg.error, 'Unable to View File at Revision');
+				if (msg.error !== null) {
+					finishOrDisplayError(msg.error, 'Unable to View File at Revision');
+				} else {
+					window.open(msg.url, '_blank');
+				}
 				break;
 			case 'viewScm':
 				finishOrDisplayError(msg.error, 'Unable to open the Source Control View');
