@@ -60,22 +60,24 @@ var stateManager = app.Services.GetRequiredService<StateManager>();
 var gitService = app.Services.GetRequiredService<GitService>();
 var watcher = app.Services.GetRequiredService<RepoWatcher>();
 
-var repoPaths = args.Length > 0
-    ? args.Where(a => !a.StartsWith("--")).ToArray()
-    : [Directory.GetCurrentDirectory()];
-
-foreach (var repoArg in repoPaths)
+var repoPath = args.FirstOrDefault(a => !a.StartsWith("--")) ?? Directory.GetCurrentDirectory();
+string? root = await gitService.RepoRootAsync(repoPath);
+if (root != null)
 {
-    string? root = await gitService.RepoRootAsync(repoArg);
-    if (root != null)
-    {
-        stateManager.EnsureRepoRegistered(root);
-        // Also register submodules
-        var submodules = await gitService.GetSubmodulesAsync(root);
-        foreach (var sub in submodules)
-            stateManager.EnsureRepoRegistered(sub);
-    }
+    stateManager.ClearRepoRegistrations();
+    stateManager.EnsureRepoRegistered(root);
+    // Also register submodules
+    var submodules = await gitService.GetSubmodulesAsync(root);
+    foreach (var sub in submodules)
+        stateManager.EnsureRepoRegistered(sub);    
 }
+else {
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"No git repository found at {repoPath} or any of its parent directories.");
+    Console.ResetColor();
+    return;
+}
+
 
 // ── SignalR hub ───────────────────────────────────────────────────────────────
 

@@ -66,7 +66,12 @@ public class StateManager
 
     // ── Last Active Repo ──────────────────────────────────────────────────────
 
-    public string? GetLastActiveRepo() => _state.LastActiveRepo;
+    public string? GetLastActiveRepo() {
+        var lastActiveRepo = _state.LastActiveRepo;
+        if (lastActiveRepo == null || !_state.Repos.ContainsKey(lastActiveRepo))
+            lastActiveRepo = _state.Repos.Keys.FirstOrDefault();
+        return lastActiveRepo;
+    }
 
     public async Task SetLastActiveRepoAsync(string repo)
     {
@@ -139,6 +144,12 @@ public class StateManager
     }
 
     // ── Repo Registration ─────────────────────────────────────────────────────
+
+    public void ClearRepoRegistrations()
+    {
+        _state.Repos.Clear();
+        _state.CodeReviews.Clear();
+    }
 
     public void EnsureRepoRegistered(string repo)
     {
