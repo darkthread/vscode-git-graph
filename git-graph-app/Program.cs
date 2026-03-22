@@ -6,6 +6,7 @@ using Microsoft.Extensions.FileProviders;
 using git_graph.Hubs;
 using git_graph.Models;
 using git_graph.Services;
+ using Drk.AspNetCore.MinimalApiKit;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,17 +42,12 @@ var app = builder.Build();
 
 // ── Static files (../media/) ──────────────────────────────────────────────────
 
-string mediaPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "media"));
-
-if (Directory.Exists(mediaPath))
+app.UseFileServer(new FileServerOptions
 {
-    var provider = new PhysicalFileProvider(mediaPath);
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = provider,
-        RequestPath = ""
-    });
-}
+    RequestPath = "",
+    FileProvider = new Microsoft.Extensions.FileProviders
+                    .ManifestEmbeddedFileProvider(typeof(Program).Assembly, "media") 
+});
 
 // ── Register repos from CLI args ──────────────────────────────────────────────
 
@@ -92,32 +88,10 @@ watcher.OnRefresh += (_, _) =>
 
 // ── Page routes ───────────────────────────────────────────────────────────────
 
-app.MapGet("/", async context =>
-{
-    string indexHtml = Path.Combine(mediaPath, "index.html");
-    if (File.Exists(indexHtml))
-    {
-        context.Response.ContentType = "text/html; charset=utf-8";
-        await context.Response.SendFileAsync(indexHtml);
-    }
-    else
-    {
-        context.Response.StatusCode = 404;
-    }
-});
-
 app.MapGet("/diff", async context =>
 {
-    string diffHtml = Path.Combine(mediaPath, "diff.html");
-    if (File.Exists(diffHtml))
-    {
-        context.Response.ContentType = "text/html; charset=utf-8";
-        await context.Response.SendFileAsync(diffHtml);
-    }
-    else
-    {
-        context.Response.StatusCode = 404;
-    }
+    var query = context.Request.QueryString.Value ?? "";
+    context.Response.Redirect($"/diff.html{query}");
 });
 
 // ── API routes ────────────────────────────────────────────────────────────────
@@ -313,5 +287,6 @@ app.MapGet("/api/diff", async (HttpContext context, string repo, string fromHash
     }
 });
 
-app.Run();
+// app.Run();
+app.RunAsDesktopTool();
 

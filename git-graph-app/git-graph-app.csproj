@@ -5,8 +5,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>git_graph</RootNamespace>
+    <AssemblyName>GitGraphApp</AssemblyName>
+    <PublishSingleFile>true</PublishSingleFile>
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="./media/**" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="media\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Drk.AspNetCore.MinimalApiKit" Version="0.9.7" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.5" />
   </ItemGroup>
 </Project>
