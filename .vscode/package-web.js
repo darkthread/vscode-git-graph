@@ -16,10 +16,18 @@ const OUTPUT_TMP_JS_FILE = 'out.tmp.js';
 const DEBUG = process.argv.length > 2 && process.argv[2] === 'debug';
 
 
+// Keep the SignalR UMD bundle up-to-date in media/ so it is served as a
+// standalone <script> before out.min.js. It must NOT be bundled into out.min.js.
+const SIGNALR_BUNDLE_SRC = path.join('node_modules', '@microsoft', 'signalr', 'dist', 'browser', 'signalr.min.js');
+const SIGNALR_BUNDLE_DEST = path.join(MEDIA_DIRECTORY, 'signalr.min.js');
+if (fs.existsSync(SIGNALR_BUNDLE_SRC)) {
+	fs.copyFileSync(SIGNALR_BUNDLE_SRC, SIGNALR_BUNDLE_DEST);
+}
+
 // Determine the JS files to be packaged. The order is: utils.ts, *.ts, and then main.ts
 let packageJsFiles = [path.join(MEDIA_DIRECTORY, UTILS_JS_FILE)];
 fs.readdirSync(MEDIA_DIRECTORY).forEach((fileName) => {
-	if (fileName.endsWith('.js') && fileName !== OUTPUT_MIN_JS_FILE && fileName !== UTILS_JS_FILE && fileName !== MAIN_JS_FILE) {
+	if (fileName.endsWith('.js') && fileName !== OUTPUT_MIN_JS_FILE && fileName !== UTILS_JS_FILE && fileName !== MAIN_JS_FILE && fileName !== 'signalr.min.js') {
 		packageJsFiles.push(path.join(MEDIA_DIRECTORY, fileName));
 	}
 });
