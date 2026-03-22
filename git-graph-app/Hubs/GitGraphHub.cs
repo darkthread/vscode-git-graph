@@ -230,9 +230,11 @@ public class GitGraphHub : Hub<IGitGraphClient>
             case "openFile":
             {
                 var req = Deserialize<RequestOpenFile>(message);
-                // In standalone mode, provide file path as external URL
-                string fullPath = Path.Combine(req.Repo, req.FilePath);
-                await Send(new { command = "openFile", path = fullPath, error = (string?)null });
+                // In standalone mode, open the file content in a new browser tab via /api/file
+                var viewUrl = $"/api/file?repo={Uri.EscapeDataString(req.Repo)}" +
+                              $"&hash={Uri.EscapeDataString(req.Hash ?? "HEAD")}" +
+                              $"&file={Uri.EscapeDataString(req.FilePath)}";
+                await Send(new { command = "openFile", viewUrl, error = (string?)null });
                 break;
             }
 
@@ -685,7 +687,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
             {
                 var req = Deserialize<RequestSetGlobalViewState>(message);
                 await _state.SetGlobalViewStateAsync(req.State);
-                await Send(new { command });
+                await Send(new { command, error = (string?)null });
                 break;
             }
 
@@ -693,7 +695,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
             {
                 var req = Deserialize<RequestSetWorkspaceViewState>(message);
                 await _state.SetWorkspaceViewStateAsync(req.State);
-                await Send(new { command });
+                await Send(new { command, error = (string?)null });
                 break;
             }
 
@@ -720,8 +722,12 @@ public class GitGraphHub : Hub<IGitGraphClient>
             case "showErrorMessage":
             case "fetchAvatar":
             case "rescanForRepos":
+                // Fire-and-forget in standalone mode — no response needed
+                break;
+
             case "exportRepoConfig":
-                // Fire-and-forget in standalone mode
+                // Not supported in standalone mode — respond so the dialog closes
+                await Send(new { command, error = (string?)null });
                 break;
 
             default:

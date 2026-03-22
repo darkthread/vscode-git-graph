@@ -51,7 +51,6 @@ if (Directory.Exists(mediaPath))
         FileProvider = provider,
         RequestPath = ""
     });
-    Console.WriteLine($"Serving static files from {mediaPath}");
 }
 
 // ── Register repos from CLI args ──────────────────────────────────────────────
@@ -69,7 +68,8 @@ if (root != null)
     // Also register submodules
     var submodules = await gitService.GetSubmodulesAsync(root);
     foreach (var sub in submodules)
-        stateManager.EnsureRepoRegistered(sub);    
+        stateManager.EnsureRepoRegistered(sub);
+    watcher.Start(root);
 }
 else {
     Console.ForegroundColor = ConsoleColor.Red;
@@ -176,10 +176,10 @@ app.MapGet("/api/initialState", (HttpContext context) =>
             merge = new { noCommit = false, noFastForward = false, squash = false },
             popStash = new { reinstateIndex = false },
             pullBranch = new { noFastForward = false, squash = false },
-            rebase = new { ignoreDate = true, launchInteractiveRebase = false },
+            rebase = new { ignoreDate = true, interactive = false },
             resetCommit = new { mode = 1 },                         // GitResetMode.Mixed = 1
-            resetUncommittedChanges = new { mode = 1 },
-            stashChanges = new { includeUntracked = true, onlyStaged = false },
+            resetUncommitted = new { mode = 1 },
+            stashUncommittedChanges = new { includeUntracked = true },
             revertCommit = new { noCommit = false }
         },
         enhancedAccessibility = false,
