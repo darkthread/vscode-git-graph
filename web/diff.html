@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Git Diff</title>
+
+	<!-- diff2html CSS (local copy, offline-safe) -->
+	<link rel="stylesheet" href="/vendor/css/diff2html.min.css" />
+
+	<style>
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+				Helvetica, Arial, sans-serif;
+			background: #1e1e1e;
+			color: #d4d4d4;
+			margin: 0;
+			padding: 1rem 2rem 2rem;
+		}
+
+		h1 {
+			font-size: 1rem;
+			font-weight: 600;
+			margin-bottom: 1rem;
+			color: #cccccc;
+		}
+
+		#status {
+			color: #888;
+			font-style: italic;
+			margin-bottom: 1rem;
+		}
+
+		/* Give diff2html's light theme a proper white base so transparent
+		   table cells don't inherit the dark page background. */
+		#diff-container,
+		.d2h-wrapper,
+		.d2h-file-wrapper,
+		.d2h-diff-table,
+		.d2h-code-wrapper,
+		.d2h-code-line,
+		.d2h-code-linenumber {
+			background-color: #ffffff;
+			color: #24292e;
+		}
+
+		.d2h-wrapper {
+			border-radius: 4px;
+			overflow: hidden;
+		}
+	</style>
+</head>
+<body>
+
+<h1 id="title">Git Diff</h1>
+<div id="status">Loading&hellip;</div>
+<div id="diff-container"></div>
+
+<!-- diff2html JS (local copy, offline-safe) -->
+<script src="/vendor/js/diff2html-ui.min.js"></script>
+
+<script>
+	(async () => {
+		const params    = new URLSearchParams(location.search);
+		const repo      = params.get('repo')     ?? '';
+		const fromHash  = params.get('fromHash') ?? '';
+		const toHash    = params.get('toHash')   ?? '';
+		const oldPath   = params.get('oldPath')  ?? '';
+		const newPath   = params.get('newPath')  ?? '';
+
+		const displayPath = newPath || oldPath;
+		document.title = displayPath ? 'Diff \u2014 ' + displayPath : 'Git Diff';
+		document.getElementById('title').textContent =
+			displayPath ? 'Git Diff \u2014 ' + displayPath : 'Git Diff';
+
+		const statusEl    = document.getElementById('status');
+		const containerEl = document.getElementById('diff-container');
+
+		if (!repo || !fromHash || !toHash) {
+			statusEl.textContent = 'Missing required parameters (repo, fromHash, toHash).';
+			return;
+		}
+
+		const apiUrl = '/api/diff?' + new URLSearchParams({ repo, fromHash, toHash, oldPath, newPath });
+		let rawDiff;
+		try {
+			const response = await fetch(apiUrl);
+			if (!response.ok) {
+				statusEl.textContent = 'Error ' + response.status + ': ' + (await response.text());
+				return;
+			}
+			rawDiff = await response.text();
+		} catch (err) {
+			statusEl.textContent = 'Failed to fetch diff: ' + err;
+			return;
+		}
+
+		statusEl.remove();
+
+		if (!rawDiff.trim()) {
+			containerEl.innerHTML = '<p style="color:#888;font-style:italic">No differences found.</p>';
+			return;
+		}
+
+		const ui = new Diff2HtmlUI(containerEl, rawDiff, {
+			drawFileList:      true,
+			matching:          'lines',
+			outputFormat:      'side-by-side',
+			highlight:         true,
+			fileContentToggle: true
+		});
+		ui.draw();
+		ui.highlightCode();
+	})();
+</script>
+
+</body>
+</html>

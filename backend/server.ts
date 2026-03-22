@@ -311,9 +311,15 @@ async function main() {
 
 	// Serve compiled frontend assets (out.min.js, out.min.css, theme.css)
 	app.use(express.static(STATIC_DIR));
+	// Serve diff2html vendor assets from node_modules (offline-safe, no manual downloads)
+	app.use('/vendor', express.static(path.join(REPO_ROOT, 'node_modules', 'diff2html', 'bundles')));
 	// Serve index.html at root
 	app.get('/', (_req, res) => {
 		res.sendFile(path.join(REPO_ROOT, 'web', 'index.html'));
+	});
+	// Serve diff viewer
+	app.get('/diff', (_req, res) => {
+		res.sendFile(path.join(REPO_ROOT, 'web', 'diff.html'));
 	});
 
 	/* GET /api/initialState — all data needed before out.min.js runs */
@@ -365,9 +371,24 @@ async function main() {
 		if (!repo || !fromHash || !toHash) {
 			return res.status(400).send('Missing required parameters');
 		}
-		const from = fromHash === '*' ? '' : fromHash;
-		const to   = toHash   === '*' ? '' : toHash;
-		const args = ['diff', '--no-color', from + (to ? '..' + to : ''),
+
+		// When fromHash === toHash it means "show this file's changes in that commit",
+		// so we diff against the parent (HASH^).  Working-tree sentinel '*' → ''.
+		let from: string;
+		let to: string;
+		if (toHash === '*') {
+			from = fromHash === '*' ? '' : fromHash;
+			to   = '';
+		} else if (fromHash === toHash) {
+			from = fromHash + '^';
+			to   = toHash;
+		} else {
+			from = fromHash;
+			to   = toHash;
+		}
+
+		const rangeArg = to ? from + '..' + to : from;
+		const args = ['diff', '--no-color', '--find-renames', rangeArg,
 			'--', oldPath ?? newPath, newPath ?? oldPath].filter(Boolean);
 
 		cp.execFile(
@@ -512,7 +533,7 @@ async function main() {
 					/* ── File viewing (redirect to HTTP API) ───────────── */
 
 					case 'viewDiff': {
-						const url = '/api/diff?repo=' + encodeURIComponent(msg.repo) +
+						const url = '/diff?repo=' + encodeURIComponent(msg.repo) +
 							'&fromHash=' + encodeURIComponent(msg.fromHash) +
 							'&toHash=' + encodeURIComponent(msg.toHash) +
 							'&oldPath=' + encodeURIComponent(msg.oldFilePath) +
@@ -523,7 +544,7 @@ async function main() {
 					}
 
 					case 'viewDiffWithWorkingFile': {
-						const url = '/api/diff?repo=' + encodeURIComponent(msg.repo) +
+						const url = '/diff?repo=' + encodeURIComponent(msg.repo) +
 							'&fromHash=' + encodeURIComponent(msg.hash) +
 							'&toHash=*&oldPath=' + encodeURIComponent(msg.filePath) +
 							'&newPath=' + encodeURIComponent(msg.filePath);
