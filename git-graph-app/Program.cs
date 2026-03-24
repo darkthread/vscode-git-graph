@@ -6,7 +6,7 @@ using Microsoft.Extensions.FileProviders;
 using git_graph.Hubs;
 using git_graph.Models;
 using git_graph.Services;
- using Drk.AspNetCore.MinimalApiKit;
+using Drk.AspNetCore.MinimalApiKit;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,7 +46,7 @@ app.UseFileServer(new FileServerOptions
 {
     RequestPath = "",
     FileProvider = new Microsoft.Extensions.FileProviders
-                    .ManifestEmbeddedFileProvider(typeof(Program).Assembly, "media") 
+                    .ManifestEmbeddedFileProvider(typeof(Program).Assembly, "media")
 });
 
 // ── Register repos from CLI args ──────────────────────────────────────────────
@@ -67,7 +67,8 @@ if (root != null)
         stateManager.EnsureRepoRegistered(sub);
     watcher.Start(root);
 }
-else {
+else
+{
     Console.ForegroundColor = ConsoleColor.Red;
     Console.WriteLine($"No git repository found at {repoPath} or any of its parent directories.");
     Console.ResetColor();
@@ -252,31 +253,7 @@ app.MapGet("/api/diff", async (HttpContext context, string repo, string fromHash
 {
     try
     {
-        var gitExeService = app.Services.GetRequiredService<GitExecutableService>();
-        var exe = await gitExeService.GetGitAsync();
-        if (exe == null) { context.Response.StatusCode = 500; return; }
-
-        var args = new List<string>
-        {
-            "-c", "color.ui=false",
-            "diff", fromHash == toHash ? $"{fromHash}^..{fromHash}" : $"{fromHash}..{toHash}",
-            "--", oldPath
-        };
-        if (oldPath != newPath) args.Add(newPath);
-
-        var psi = new System.Diagnostics.ProcessStartInfo(exe.Path)
-        {
-            WorkingDirectory = repo,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        foreach (var a in args) psi.ArgumentList.Add(a);
-
-        using var proc = System.Diagnostics.Process.Start(psi)!;
-        string output = await proc.StandardOutput.ReadToEndAsync();
-        await proc.WaitForExitAsync();
-
+        string output = await gitService.GetDiffAsync(repo, fromHash, toHash, oldPath, newPath);
         context.Response.ContentType = "text/plain; charset=utf-8";
         await context.Response.WriteAsync(output);
     }
@@ -287,6 +264,12 @@ app.MapGet("/api/diff", async (HttpContext context, string repo, string fromHash
     }
 });
 
-// app.Run();
-app.RunAsDesktopTool();
+if (System.Diagnostics.Debugger.IsAttached)
+{
+    app.Run();
+}
+else
+{
+    app.RunAsDesktopTool();
+}
 

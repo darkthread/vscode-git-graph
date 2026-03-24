@@ -320,6 +320,19 @@ public class GitService
         return result.Stdout;
     }
 
+    public async Task<string> GetDiffAsync(string repo, string fromHash, string toHash, string oldPath, string newPath)
+    {
+        var args = new List<string>
+        {
+            "-c", "color.ui=false",
+            "diff", fromHash == toHash ? $"{fromHash}^..{fromHash}" : $"{fromHash}..{toHash}",
+            "--", oldPath
+        };
+        if (oldPath != newPath) args.Add(newPath);
+        var result = await SpawnGitAsync([.. args], repo);
+        return result.Stdout;
+    }
+
     public async Task<string?> GetCommitSubjectAsync(string repo, string commitHash)
     {
         try
@@ -1109,6 +1122,8 @@ public class GitService
         {
             var fields = output[i].Split('\t');
             if (fields.Length != 3) break;
+            if (fields[0] == "-") fields[0] = "0";
+            if (fields[1] == "-") fields[1] = "0";
             if (fields[2] != "")
             {
                 records.Add(new DiffNumStatRecord(fields[2], int.Parse(fields[0]), int.Parse(fields[1])));
