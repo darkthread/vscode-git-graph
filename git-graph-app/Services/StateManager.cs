@@ -1,6 +1,6 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using git_graph.Models;
+using git_graph.Models.Serialization;
 
 namespace git_graph.Services;
 
@@ -15,14 +15,6 @@ public class StateManager
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
     private PersistedState _state = new();
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-    };
 
     public StateManager(ILogger<StateManager> logger)
     {
@@ -174,7 +166,7 @@ public class StateManager
         {
             if (!File.Exists(_stateFilePath)) return;
             string json = await File.ReadAllTextAsync(_stateFilePath);
-            _state = JsonSerializer.Deserialize<PersistedState>(json, JsonOptions) ?? new PersistedState();
+            _state = JsonSerializer.Deserialize(json, GitGraphJsonOptions.StateContext.PersistedState) ?? new PersistedState();
         }
         catch (Exception ex)
         {
@@ -188,7 +180,7 @@ public class StateManager
         await _semaphore.WaitAsync();
         try
         {
-            string json = JsonSerializer.Serialize(_state, JsonOptions);
+            string json = JsonSerializer.Serialize(_state, GitGraphJsonOptions.StateContext.PersistedState);
             await File.WriteAllTextAsync(_stateFilePath, json);
         }
         catch (Exception ex)

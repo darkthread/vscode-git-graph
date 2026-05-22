@@ -3188,6 +3188,25 @@ window.addEventListener('load', () => {
 	const gitGraph = new GitGraphView(viewElem, VSCODE_API.getState());
 	const imageResizer = new ImageResizer();
 
+	/* Diff dialog */
+	const diffDialog = document.getElementById('diffDialog') as HTMLDialogElement | null;
+	const diffDialogFrame = document.getElementById('diffDialogFrame') as HTMLIFrameElement | null;
+	if (diffDialog !== null && diffDialogFrame !== null) {
+		const dlg = diffDialog, frm = diffDialogFrame;
+		const closeBtn = document.getElementById('diffDialogClose');
+		if (closeBtn !== null) {
+			closeBtn.addEventListener('click', function() { dlg.close(); });
+		}
+		dlg.addEventListener('close', function() { frm.src = 'about:blank'; });
+		dlg.addEventListener('click', function(e) { if (e.target === dlg) { dlg.close(); } });
+	}
+	function openDiffDialog(url: string | undefined) {
+		if (url === undefined) { return; }
+		if (diffDialog === null || diffDialogFrame === null) { window.open(url, '_blank'); return; }
+		diffDialogFrame.src = url;
+		diffDialog.showModal();
+	}
+
 	/* Command Processing */
 	window.addEventListener('message', event => {
 		const msg: GG.ResponseMessage = event.data;
@@ -3404,21 +3423,21 @@ window.addEventListener('load', () => {
 				if (msg.error !== null) {
 					finishOrDisplayError(msg.error, 'Unable to View Diff');
 				} else {
-					window.open(msg.url, '_blank');
+					openDiffDialog(msg.url);
 				}
 				break;
 			case 'viewDiffWithWorkingFile':
 				if (msg.error !== null) {
 					finishOrDisplayError(msg.error, 'Unable to View Diff with Working File');
 				} else {
-					window.open(msg.url, '_blank');
+					openDiffDialog(msg.url);
 				}
 				break;
 			case 'viewFileAtRevision':
 				if (msg.error !== null) {
 					finishOrDisplayError(msg.error, 'Unable to View File at Revision');
 				} else {
-					window.open(msg.url, '_blank');
+					openDiffDialog(msg.url);
 				}
 				break;
 			case 'viewScm':

@@ -1,40 +1,20 @@
 using Microsoft.AspNetCore.SignalR;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using git_graph.Models;
+using git_graph.Models.Serialization;
 using git_graph.Services;
 
 namespace git_graph.Hubs;
 
-// ── Client interface ──────────────────────────────────────────────────────────
-
-public interface IGitGraphClient
-{
-    Task ReceiveMessage(object response);
-}
-
 // ── Hub ───────────────────────────────────────────────────────────────────────
 
-public class GitGraphHub : Hub<IGitGraphClient>
+public class GitGraphHub : Hub
 {
     private readonly GitService _git;
     private readonly StateManager _state;
     private readonly RepoWatcher _watcher;
     private readonly ILogger<GitGraphHub> _logger;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        // Do NOT use WhenWritingNull — frontend distinguishes null from undefined for error checks.
-        Converters = {
-            new GitFileStatusConverter(),
-            new GitSignatureStatusConverter(),
-            new MergeActionOnConverter(),
-            new RebaseActionOnConverter(),
-            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
-        }
-    };
 
     public GitGraphHub(
         GitService git, StateManager state, RepoWatcher watcher, ILogger<GitGraphHub> logger)
@@ -54,6 +34,8 @@ public class GitGraphHub : Hub<IGitGraphClient>
 
         _logger.LogDebug("Hub received command: {Command}", command);
 
+        try
+        {
         switch (command)
         {
             // ── Read queries ──────────────────────────────────────────────────
@@ -69,17 +51,9 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 _state.EnsureRepoRegistered(req.Repo);
                 _watcher.Start(req.Repo);
 
-                await Send(new
-                {
-                    command = "loadCommits",
-                    repo = req.Repo,
-                    refreshId = req.RefreshId,
-                    commits = data.Commits,
-                    head = data.Head,
-                    tags = data.Tags,
-                    moreCommitsAvailable = data.MoreCommitsAvailable,
-                    error = data.Error
-                });
+                await Send(new LoadCommitsResponse(
+                    "loadCommits", req.Repo, req.RefreshId, data.Commits, data.Head, data.Tags,
+                    data.MoreCommitsAvailable, req.OnlyFollowFirstParent, data.Error));
                 break;
             }
 
@@ -88,18 +62,9 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var req = Deserialize<RequestLoadRepoInfo>(message);
                 var data = await _git.GetRepoInfoAsync(req.Repo, req.ShowRemoteBranches, req.ShowStashes, req.HideRemotes);
 
-                var responsePayload = new
-                {
-                    command = "loadRepoInfo",
-                    repo = req.Repo,
-                    refreshId = req.RefreshId,
-                    branches = data.Branches,
-                    head = data.Head,
-                    remotes = data.Remotes,
-                    stashes = data.Stashes,
-                    isRepo = data.Error == null,
-                    error = data.Error
-                };
+                var responsePayload = new LoadRepoInfoResponse(
+                    "loadRepoInfo", req.Repo, req.RefreshId, data.Branches, data.Head,
+                    data.Remotes, data.Stashes, data.Error == null, data.Error);
                 _logger.LogInformation("loadRepoInfo response: error={Error} isRepo={IsRepo} branches={Count}",
                     data.Error ?? "(null)", data.Error == null, data.Branches.Length);
                 await Send(responsePayload);
@@ -111,13 +76,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var repos = _state.GetRepos();
                 var lastActiveRepo = _state.GetLastActiveRepo();
 
-                await Send(new
-                {
-                    command = "loadRepos",
-                    repos,
-                    lastActiveRepo,
-                    loadViewTo = (object?)null
-                });
+                await Send(new LoadReposResponse("loadRepos", repos, lastActiveRepo, null));
                 break;
             }
 
@@ -126,13 +85,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var req = Deserialize<RequestLoadConfig>(message);
                 var data = await _git.GetConfigAsync(req.Repo, req.Remotes);
 
-                await Send(new
-                {
-                    command = "loadConfig",
-                    repo = req.Repo,
-                    config = data.Config,
-                    error = data.Error
-                });
+                await Send(new LoadConfigResponse("loadConfig", req.Repo, data.Config, data.Error));
                 break;
             }
 
@@ -148,16 +101,8 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 else
                     data = await _git.GetCommitDetailsAsync(req.Repo, req.CommitHash, req.HasParents);
 
-                await Send(new
-                {
-                    command = "commitDetails",
-                    repo = req.Repo,
-                    commitDetails = data.CommitDetails,
-                    avatar = (string?)null,
-                    codeReview = (object?)null,
-                    refresh = req.Refresh,
-                    error = data.Error
-                });
+                await Send(new CommitDetailsResponse(
+                    "commitDetails", req.Repo, data.CommitDetails, null, null, req.Refresh, data.Error));
                 break;
             }
 
@@ -166,17 +111,9 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var req = Deserialize<RequestCompareCommits>(message);
                 var data = await _git.GetCommitComparisonAsync(req.Repo, req.FromHash, req.ToHash);
 
-                await Send(new
-                {
-                    command = "compareCommits",
-                    repo = req.Repo,
-                    commitHash = req.CommitHash,
-                    compareWithHash = req.CompareWithHash,
-                    fileChanges = data.FileChanges,
-                    codeReview = (object?)null,
-                    refresh = req.Refresh,
-                    error = data.Error
-                });
+                await Send(new CompareCommitsResponse(
+                    "compareCommits", req.Repo, req.CommitHash, req.CompareWithHash,
+                    data.FileChanges, null, req.Refresh, data.Error));
                 break;
             }
 
@@ -185,15 +122,8 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var req = Deserialize<RequestTagDetails>(message);
                 var data = await _git.GetTagDetailsAsync(req.Repo, req.TagName);
 
-                await Send(new
-                {
-                    command = "tagDetails",
-                    repo = req.Repo,
-                    tagName = req.TagName,
-                    commitHash = req.CommitHash,
-                    details = data.Details,
-                    error = data.Error
-                });
+                await Send(new TagDetailsResponse(
+                    "tagDetails", req.Repo, req.TagName, req.CommitHash, data.Details, data.Error));
                 break;
             }
 
@@ -203,7 +133,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
             {
                 var req = Deserialize<RequestViewDiff>(message);
                 var url = BuildDiffUrl(req.Repo, req.FromHash, req.ToHash, req.OldFilePath, req.NewFilePath);
-                await Send(new { command = "viewDiff", url, error = (string?)null });
+                await Send(new ViewUrlResponse("viewDiff", url, null));
                 break;
             }
 
@@ -213,7 +143,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 string? newPath = await _git.GetNewPathOfRenamedFileAsync(req.Repo, req.Hash, req.FilePath);
                 string filePath = newPath ?? req.FilePath;
                 var url = BuildDiffUrl(req.Repo, req.Hash, "*", req.FilePath, filePath);
-                await Send(new { command = "viewDiffWithWorkingFile", url, error = (string?)null });
+                await Send(new ViewUrlResponse("viewDiffWithWorkingFile", url, null));
                 break;
             }
 
@@ -223,7 +153,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var url = $"/api/file?repo={Uri.EscapeDataString(req.Repo)}" +
                           $"&hash={Uri.EscapeDataString(req.Hash)}" +
                           $"&file={Uri.EscapeDataString(req.FilePath)}";
-                await Send(new { command = "viewFileAtRevision", url, error = (string?)null });
+                await Send(new ViewUrlResponse("viewFileAtRevision", url, null));
                 break;
             }
 
@@ -234,7 +164,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var viewUrl = $"/api/file?repo={Uri.EscapeDataString(req.Repo)}" +
                               $"&hash={Uri.EscapeDataString(req.Hash ?? "HEAD")}" +
                               $"&file={Uri.EscapeDataString(req.FilePath)}";
-                await Send(new { command = "openFile", viewUrl, error = (string?)null });
+                await Send(new OpenFileResponse("openFile", viewUrl, null));
                 break;
             }
 
@@ -329,7 +259,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 string?[] tagErrors = req.PushToRemote != null
                     ? [addError, pushError]
                     : [addError];
-                await Send(new { command, repo = req.Repo, tagName = req.TagName, pushToRemote = req.PushToRemote, commitHash = req.CommitHash, errors = tagErrors });
+                await Send(new AddTagResponse(command, req.Repo, req.TagName, req.PushToRemote, req.CommitHash, tagErrors));
                 break;
             }
 
@@ -349,7 +279,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 _watcher.Mute();
                 var errors = await _git.PushTagAsync(req.Repo, req.TagName, req.Remotes, req.CommitHash, req.SkipRemoteCheck);
                 _watcher.Unmute();
-                await Send(new { command, repo = req.Repo, tagName = req.TagName, remotes = req.Remotes, commitHash = req.CommitHash, errors });
+                await Send(new PushTagResponse(command, req.Repo, req.TagName, req.Remotes, req.CommitHash, errors));
                 break;
             }
 
@@ -366,7 +296,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                         req.PullAfterwards.Remote, req.PullAfterwards.CreateNewCommit, req.PullAfterwards.Squash);
                 }
                 _watcher.Unmute();
-                await Send(new { command, errors = new string?[] { error }, pullAfterwards = (object?)req.PullAfterwards });
+                await Send(new CheckoutBranchResponse(command, [error], req.PullAfterwards));
                 break;
             }
 
@@ -386,7 +316,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 _watcher.Mute();
                 var errors = await _git.CreateBranchAsync(req.Repo, req.BranchName, req.CommitHash, req.Checkout, req.Force);
                 _watcher.Unmute();
-                await Send(new { command, errors });
+                await Send(new MultiErrorResponse(command, errors));
                 break;
             }
 
@@ -406,7 +336,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                     }
                 }
                 _watcher.Unmute();
-                await Send(new { command, repo = req.Repo, branchName = req.BranchName, deleteOnRemotes = req.DeleteOnRemotes, errors = deleteErrors.ToArray() });
+                await Send(new DeleteBranchResponse(command, req.Repo, req.BranchName, req.DeleteOnRemotes, deleteErrors.ToArray()));
                 break;
             }
 
@@ -437,7 +367,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var errors = await _git.PushBranchToMultipleRemotesAsync(
                     req.Repo, req.BranchName, req.Remotes, req.SetUpstream, req.Mode);
                 _watcher.Unmute();
-                await Send(new { command, errors, willUpdateBranchConfig = req.WillUpdateBranchConfig });
+                await Send(new PushBranchResponse(command, errors, req.WillUpdateBranchConfig));
                 break;
             }
 
@@ -455,7 +385,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                     _watcher.Unmute();
                 }
 
-                await Send(new { command, push = req.Push, errors = new string?[] { pushError } });
+                await Send(new CreatePullRequestResponse(command, req.Push, [pushError]));
                 break;
             }
 
@@ -467,7 +397,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 _watcher.Mute();
                 var error = await _git.CherrypickCommitAsync(req.Repo, req.CommitHash, req.ParentIndex, req.RecordOrigin, req.NoCommit);
                 _watcher.Unmute();
-                await Send(new { command, errors = new string?[] { error } });
+                await Send(new MultiErrorResponse(command, [error]));
                 break;
             }
 
@@ -529,7 +459,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 _watcher.Mute();
                 var error = await _git.MergeAsync(req.Repo, req.Obj, req.ActionOn, req.CreateNewCommit, req.Squash, req.NoCommit);
                 _watcher.Unmute();
-                await Send(new { command, repo = req.Repo, actionOn = req.ActionOn, error });
+                await Send(new MergeResponse(command, req.Repo, req.ActionOn, error));
                 break;
             }
 
@@ -539,7 +469,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 _watcher.Mute();
                 var error = await _git.RebaseAsync(req.Repo, req.Obj, req.ActionOn, req.IgnoreDate, req.Interactive);
                 _watcher.Unmute();
-                await Send(new { command, repo = req.Repo, actionOn = req.ActionOn, interactive = req.Interactive, error });
+                await Send(new RebaseResponse(command, req.Repo, req.ActionOn, req.Interactive, error));
                 break;
             }
 
@@ -628,7 +558,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 if (error == null && !string.IsNullOrEmpty(req.Email))
                     error = await _git.SetConfigValueAsync(req.Repo, "user.email", req.Email, req.Location);
                 _watcher.Unmute();
-                await Send(new { command, errors = new string?[] { error } });
+                await Send(new MultiErrorResponse(command, [error]));
                 break;
             }
 
@@ -642,7 +572,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 if (error == null && req.Email)
                     error = await _git.UnsetConfigValueAsync(req.Repo, "user.email", req.Location);
                 _watcher.Unmute();
-                await Send(new { command, errors = new string?[] { error } });
+                await Send(new MultiErrorResponse(command, [error]));
                 break;
             }
 
@@ -653,14 +583,9 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var req = Deserialize<RequestStartCodeReview>(message);
                 await _state.StartCodeReviewAsync(req.Repo, req.Id, req.Files, req.LastViewedFile);
                 var codeReview = _state.GetCodeReview(req.Repo, req.Id);
-                await Send(new
-                {
-                    command,
-                    codeReview,
-                    commitHash = req.CommitHash,
-                    compareWithHash = string.IsNullOrEmpty(req.CompareWithHash) ? (string?)null : req.CompareWithHash,
-                    error = (string?)null
-                });
+                await Send(new StartCodeReviewResponse(
+                    command, codeReview, req.CommitHash,
+                    string.IsNullOrEmpty(req.CompareWithHash) ? null : req.CompareWithHash, null));
                 break;
             }
 
@@ -669,7 +594,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
                 var req = Deserialize<RequestUpdateCodeReview>(message);
                 await _state.UpdateCodeReviewAsync(req.Repo, req.Id,
                     req.LastViewedFile ?? "", req.RemainingFiles);
-                await Send(new { command, repo = req.Repo, id = req.Id, error = (string?)null });
+                await Send(new CodeReviewIdResponse(command, req.Repo, req.Id, null));
                 break;
             }
 
@@ -677,7 +602,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
             {
                 var req = Deserialize<RequestEndCodeReview>(message);
                 await _state.EndCodeReviewAsync(req.Repo, req.Id);
-                await Send(new { command, repo = req.Repo, id = req.Id });
+                await Send(new EndCodeReviewResponse(command, req.Repo, req.Id));
                 break;
             }
 
@@ -687,7 +612,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
             {
                 var req = Deserialize<RequestSetGlobalViewState>(message);
                 await _state.SetGlobalViewStateAsync(req.State);
-                await Send(new { command, error = (string?)null });
+                await Send(new ErrorResponse(command, null));
                 break;
             }
 
@@ -695,7 +620,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
             {
                 var req = Deserialize<RequestSetWorkspaceViewState>(message);
                 await _state.SetWorkspaceViewStateAsync(req.State);
-                await Send(new { command, error = (string?)null });
+                await Send(new ErrorResponse(command, null));
                 break;
             }
 
@@ -703,7 +628,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
             {
                 var req = Deserialize<RequestSetRepoState>(message);
                 await _state.SetRepoStateAsync(req.Repo, req.State);
-                await Send(new { command, repo = req.Repo });
+                await Send(new SetRepoStateResponse(command, req.Repo));
                 break;
             }
 
@@ -716,7 +641,7 @@ public class GitGraphHub : Hub<IGitGraphClient>
             case "openTerminal":
             case "viewScm":
                 // Not supported in standalone mode — send null error so the dialog closes cleanly
-                await Send(new { command, error = (string?)null });
+                await Send(new ErrorResponse(command, null));
                 break;
 
             case "showErrorMessage":
@@ -727,28 +652,40 @@ public class GitGraphHub : Hub<IGitGraphClient>
 
             case "exportRepoConfig":
                 // Not supported in standalone mode — respond so the dialog closes
-                await Send(new { command, error = (string?)null });
+                await Send(new ErrorResponse(command, null));
                 break;
 
             default:
                 _logger.LogWarning("Unknown command: {Command}", command);
                 break;
+        } // end switch
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "HandleMessage failed for command '{Command}'", command);
+            throw; // re-throw so SignalR sends the type-3 completion with the error
         }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private async Task Send(object response)
+    private async Task Send<TResponse>(TResponse response)
     {
-        await Clients.Caller.ReceiveMessage(response);
+        await Clients.Caller.SendAsync("ReceiveMessage", response);
     }
 
     private Task SendResult(string command, string repo, string? error) =>
-        Send(new { command, repo, error });
+        Send(new RepoErrorResponse(command, repo, error));
 
-    private static T Deserialize<T>(JsonElement el) where T : new()
+    private static T Deserialize<T>(JsonElement element) where T : class, new()
     {
-        return el.Deserialize<T>(JsonOptions) ?? new T();
+        var typeInfo = (JsonTypeInfo<T>?)GitGraphJsonOptions.PayloadContext.GetTypeInfo(typeof(T));
+        if (typeInfo == null)
+            throw new InvalidOperationException($"No JSON metadata is registered for {typeof(T).Name}.");
+
+        // Use the JsonElement overload directly — avoids GetRawText() string allocation
+        // and works correctly with SignalR's pooled-reader-backed elements.
+        return JsonSerializer.Deserialize(element, typeInfo) ?? new T();
     }
 
     private static string BuildDiffUrl(string repo, string fromHash, string toHash, string oldFilePath, string newFilePath)

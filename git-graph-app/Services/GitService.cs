@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using git_graph.Models;
+using git_graph.Models.Serialization;
 
 namespace git_graph.Services;
 
@@ -322,12 +323,25 @@ public class GitService
 
     public async Task<string> GetDiffAsync(string repo, string fromHash, string toHash, string oldPath, string newPath)
     {
-        var args = new List<string>
+        var args = new List<string> { "-c", "color.ui=false", "diff" };
+
+        if (toHash == UNCOMMITTED)
         {
-            "-c", "color.ui=false",
-            "diff", fromHash == toHash ? $"{fromHash}^..{fromHash}" : $"{fromHash}..{toHash}",
-            "--", oldPath
-        };
+            // Compare working tree against a specific commit (or HEAD when fromHash is also "*")
+            args.Add(fromHash == UNCOMMITTED ? "HEAD" : fromHash);
+        }
+        else if (fromHash == toHash)
+        {
+            // Single commit: show only what changed in that commit
+            args.Add($"{fromHash}^..{fromHash}");
+        }
+        else
+        {
+            args.Add($"{fromHash}..{toHash}");
+        }
+
+        args.Add("--");
+        args.Add(oldPath);
         if (oldPath != newPath) args.Add(newPath);
         var result = await SpawnGitAsync([.. args], repo);
         return result.Stdout;
@@ -580,7 +594,7 @@ public class GitService
             var remotesWithCommit = await GetRemotesContainingCommitAsync(repo, commitHash, remotes);
             var missing = remotes.Where(r => !remotesWithCommit.Contains(r)).ToArray();
             if (missing.Length > 0)
-                return [$"VSCODE_GIT_GRAPH:PUSH_TAG:COMMIT_NOT_ON_REMOTE:{System.Text.Json.JsonSerializer.Serialize(missing)}"];
+                return [$"VSCODE_GIT_GRAPH:PUSH_TAG:COMMIT_NOT_ON_REMOTE:{System.Text.Json.JsonSerializer.Serialize(missing, GitGraphJsonOptions.PayloadContext.StringArray)}"];
         }
 
         var results = new List<string?>();

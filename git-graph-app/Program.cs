@@ -1,10 +1,10 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using git_graph.Hubs;
 using git_graph.Models;
+using git_graph.Models.Serialization;
 using git_graph.Services;
 using Drk.AspNetCore.MinimalApiKit;
 
@@ -15,14 +15,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSignalR()
     .AddJsonProtocol(opt =>
     {
-        opt.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         // Do NOT set WhenWritingNull — the frontend checks `msg.error === null` to detect success;
         // omitting null props causes `undefined !== null` to fall into the error branch.
-        opt.PayloadSerializerOptions.Converters.Add(new GitFileStatusConverter());
-        opt.PayloadSerializerOptions.Converters.Add(new GitSignatureStatusConverter());
-        opt.PayloadSerializerOptions.Converters.Add(new MergeActionOnConverter());
-        opt.PayloadSerializerOptions.Converters.Add(new RebaseActionOnConverter());
-        opt.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        GitGraphJsonOptions.ConfigurePayloadOptions(opt.PayloadSerializerOptions);
+    })
+    .AddHubOptions<GitGraphHub>(opt =>
+    {
+        // Surface the real exception message to the client in development
+        // so SignalR type-3 responses show the actual error instead of the generic message.
+        opt.EnableDetailedErrors = builder.Environment.IsDevelopment();
     });
 
 builder.Services.AddSingleton<GitExecutableService>();
@@ -83,8 +84,8 @@ app.MapHub<GitGraphHub>("/hub");
 // Wire watcher refresh to all connected clients
 watcher.OnRefresh += (_, _) =>
 {
-    var hub = app.Services.GetRequiredService<IHubContext<GitGraphHub, IGitGraphClient>>();
-    _ = hub.Clients.All.ReceiveMessage(new { command = "refresh" });
+    var hub = app.Services.GetRequiredService<IHubContext<GitGraphHub>>();
+    _ = hub.Clients.All.SendAsync("ReceiveMessage", new RefreshResponse());
 };
 
 // ── Page routes ───────────────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ app.MapGet("/diff", async context =>
 
 // ── API routes ────────────────────────────────────────────────────────────────
 
-app.MapGet("/api/initialState", (HttpContext context) =>
+app.MapGet("/api/initialState", () =>
 {
     var repos = stateManager.GetRepos();
     var lastActiveRepo = stateManager.GetLastActiveRepo();
@@ -113,123 +114,31 @@ app.MapGet("/api/initialState", (HttpContext context) =>
     var colorParams = string.Concat(graphColours.Select((_, i) =>
         $"[data-color=\"{i}\"]{{--git-graph-color:var(--git-graph-color{i});}} "));
 
-    // Full config object with sensible defaults — mirrors GitGraphViewConfig in types.ts
-    var config = new
+    var initialState = new GitGraphViewInitialState
     {
-        commitDetailsView = new
+        Config = new GitGraphViewConfig
         {
-            autoCenter = true,
-            fileTreeCompactFolders = true,
-            fileViewType = 0,   // FileViewType.Default = 0
-            location = 0        // CommitDetailsViewLocation.Inline = 0
+            Graph = new GraphConfig { Colours = graphColours }
         },
-        commitOrdering = 0,     // CommitOrdering.Date = 0
-        contextMenuActionsVisibility = new
-        {
-            branch = new { checkout = true, rename = true, delete = true, rebase = true, merge = true, revert = true, cherryPick = true, createArchive = true, copyName = true },
-            commit = new { addTag = true, createBranch = true, merge = true, revert = true, cherryPick = true, checkout = true, resetCurrentBranchToHere = true, createArchive = true, copyHash = true },
-            remoteBranch = new { checkout = true, delete = true, fetch = true, merge = true, rebase = true, pull = true, createArchive = true, copyName = true },
-            stash = new { apply = true, createBranch = true, pop = true, drop = true, copyName = true },
-            tag = new { viewDetails = true, delete = true, pushTag = true, createArchive = true, copyName = true },
-            uncommittedChanges = new { stash = true, resetUncommittedChanges = true, cleanUncommittedChanges = true, openSourceControlView = true }
-        },
-        customBranchGlobPatterns = Array.Empty<object>(),
-        customEmojiShortcodeMappings = Array.Empty<object>(),
-        customPullRequestProviders = Array.Empty<object>(),
-        dateFormat = new { type = 0, iso = false },  // DateFormatType.DateAndTime = 0
-        defaultColumnVisibility = new { date = true, author = true, commit = true },
-        dialogDefaults = new
-        {
-            general = new { referenceInputSpaceSubstitution = (object?)null },
-            addTag = new { pushToRemote = false, type = 1 },       // GitTagType.Annotated = 1
-            applyStash = new { reinstateIndex = false },
-            cherryPick = new { noCommit = false, recordOrigin = false },
-            createBranch = new { checkout = true },
-            deleteBranch = new { forceDelete = false },
-            fetchIntoLocalBranch = new { forceFetch = false },
-            fetchRemote = new { prune = false, pruneTags = false },
-            merge = new { noCommit = false, noFastForward = false, squash = false },
-            popStash = new { reinstateIndex = false },
-            pullBranch = new { noFastForward = false, squash = false },
-            rebase = new { ignoreDate = true, interactive = false },
-            resetCommit = new { mode = 1 },                         // GitResetMode.Mixed = 1
-            resetUncommitted = new { mode = 1 },
-            stashUncommittedChanges = new { includeUntracked = true },
-            revertCommit = new { noCommit = false }
-        },
-        enhancedAccessibility = false,
-        fetchAndPrune = false,
-        fetchAndPruneTags = false,
-        fetchAvatars = false,
-        graph = new
-        {
-            colours = graphColours,
-            style = 0,              // GraphStyle.Rounded = 0
-            grid = new { x = 16, y = 24, offsetX = 16, offsetY = 12, expandY = 250 },
-            uncommittedChanges = 0  // GraphUncommittedChangesStyle.OpenCircleAtTheUncommittedChanges = 0
-        },
-        includeCommitsMentionedByReflogs = false,
-        initialLoadCommits = 300,
-        keybindings = new { find = "f", refresh = "r", scrollToHead = "h", scrollToStash = "s" },
-        loadMoreCommits = 75,
-        loadMoreCommitsAutomatically = true,
-        markdown = true,
-        mute = new
-        {
-            commitType = "head",    // MuteCommitType.Head
-            head = false,
-            tags = false,
-            merges = false,
-            whitespace = false
-        },
-        onlyFollowFirstParent = false,
-        onRepoLoad = new { showCheckedOutBranch = false, showSpecificBranches = Array.Empty<string>() },
-        referenceLabels = new
-        {
-            branchLabelsAlignedToGraph = false,
-            combineLocalAndRemoteBranchLabels = true,
-            fetchAndPrune = false,
-            fetchAndPruneTags = false,
-            onlyFollowFirstParent = false
-        },
-        repoDropdownOrder = "name",  // RepoDropdownOrder.Name
-        showRemoteBranches = true,
-        showStashes = true,
-        showTags = true
+        LastActiveRepo = lastActiveRepo,
+        LoadViewTo = null,
+        Repos = repos,
+        LoadRepoInfoRefreshId = 0,
+        LoadCommitsRefreshId = 0
     };
 
-    var initialState = new
+    var response = new InitialStateResponse
     {
-        config,
-        lastActiveRepo,
-        loadViewTo = (object?)null,
-        repos,
-        loadRepoInfoRefreshId = 0,
-        loadCommitsRefreshId = 0
+        InitialState = initialState,
+        GlobalState = stateManager.GetGlobalViewState(),
+        WorkspaceState = stateManager.GetWorkspaceViewState(),
+        ColorVars = colorVars,
+        ColorParams = colorParams
     };
 
-    var globalState = new
-    {
-        alwaysAcceptCheckoutCommit = false,
-        issueLinkingConfig = (object?)null,
-        pushTagSkipRemoteCheck = false
-    };
-
-    var workspaceState = new
-    {
-        findIsCaseSensitive = false,
-        findIsRegex = false,
-        findOpenCommitDetailsView = false
-    };
-
-    var response = new { initialState, globalState, workspaceState, colorVars, colorParams };
-
-    return Results.Json(response, new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        // Keep null values (e.g. loadViewTo, issueLinkingConfig, lastActiveRepo) so the
-        // frontend can distinguish null from undefined — the JS code checks !== null.
-    });
+    // Keep null values (e.g. loadViewTo, issueLinkingConfig, lastActiveRepo) so the
+    // frontend can distinguish null from undefined — the JS code checks !== null.
+    return Results.Json(response, GitGraphJsonOptions.PayloadContext.InitialStateResponse);
 });
 
 // Return raw file content at a given revision

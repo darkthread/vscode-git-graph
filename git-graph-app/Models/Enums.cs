@@ -66,12 +66,46 @@ public class GitSignatureStatusConverter : JsonConverter<GitSignatureStatus>
         writer.WriteStringValue(_write.TryGetValue(value, out var s) ? s : "E");
 }
 
+public abstract class StringEnumJsonConverter<TEnum> : JsonConverter<TEnum> where TEnum : struct, Enum
+{
+    private readonly Dictionary<string, TEnum> _read;
+    private readonly Dictionary<TEnum, string> _write;
+    private readonly TEnum _fallback;
+
+    protected StringEnumJsonConverter(Dictionary<TEnum, string> values, TEnum fallback)
+    {
+        _write = values;
+        _read = values.ToDictionary(pair => pair.Value, pair => pair.Key);
+        _fallback = fallback;
+    }
+
+    public override TEnum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var value = reader.GetString() ?? "";
+        return _read.TryGetValue(value, out var enumValue) ? enumValue : _fallback;
+    }
+
+    public override void Write(Utf8JsonWriter writer, TEnum value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(_write.TryGetValue(value, out var text) ? text : _write[_fallback]);
+    }
+}
+
 public enum GitConfigLocation
 {
     Local,
     Global,
     System
 }
+
+public class GitConfigLocationConverter() : StringEnumJsonConverter<GitConfigLocation>(
+    new Dictionary<GitConfigLocation, string>
+    {
+        [GitConfigLocation.Local] = "local",
+        [GitConfigLocation.Global] = "global",
+        [GitConfigLocation.System] = "system"
+    },
+    GitConfigLocation.Local);
 
 public enum GitPushBranchMode
 {
@@ -80,12 +114,30 @@ public enum GitPushBranchMode
     ForceWithLease
 }
 
+public class GitPushBranchModeConverter() : StringEnumJsonConverter<GitPushBranchMode>(
+    new Dictionary<GitPushBranchMode, string>
+    {
+        [GitPushBranchMode.Normal] = "",
+        [GitPushBranchMode.Force] = "force",
+        [GitPushBranchMode.ForceWithLease] = "force-with-lease"
+    },
+    GitPushBranchMode.Normal);
+
 public enum GitResetMode
 {
     Soft,
     Mixed,
     Hard
 }
+
+public class GitResetModeConverter() : StringEnumJsonConverter<GitResetMode>(
+    new Dictionary<GitResetMode, string>
+    {
+        [GitResetMode.Soft] = "soft",
+        [GitResetMode.Mixed] = "mixed",
+        [GitResetMode.Hard] = "hard"
+    },
+    GitResetMode.Mixed);
 
 public enum BooleanOverride
 {
@@ -101,6 +153,15 @@ public enum CommitOrdering
     Topological
 }
 
+public class CommitOrderingConverter() : StringEnumJsonConverter<CommitOrdering>(
+    new Dictionary<CommitOrdering, string>
+    {
+        [CommitOrdering.Date] = "date",
+        [CommitOrdering.AuthorDate] = "author-date",
+        [CommitOrdering.Topological] = "topo"
+    },
+    CommitOrdering.Date);
+
 public enum RepoCommitOrdering
 {
     Default,
@@ -108,6 +169,16 @@ public enum RepoCommitOrdering
     AuthorDate,
     Topological
 }
+
+public class RepoCommitOrderingConverter() : StringEnumJsonConverter<RepoCommitOrdering>(
+    new Dictionary<RepoCommitOrdering, string>
+    {
+        [RepoCommitOrdering.Default] = "default",
+        [RepoCommitOrdering.Date] = "date",
+        [RepoCommitOrdering.AuthorDate] = "author-date",
+        [RepoCommitOrdering.Topological] = "topo"
+    },
+    RepoCommitOrdering.Default);
 
 public enum DateFormatType
 {

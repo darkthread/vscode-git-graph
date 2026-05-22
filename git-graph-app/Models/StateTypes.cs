@@ -102,9 +102,9 @@ public class PersistedState
 
 public class GitGraphViewInitialState
 {
-    public object Config { get; set; } = new();
+    public GitGraphViewConfig Config { get; set; } = new();
     public string? LastActiveRepo { get; set; }
-    public object? LoadViewTo { get; set; }
+    public LoadGitGraphViewTo? LoadViewTo { get; set; }
     public Dictionary<string, GitRepoState> Repos { get; set; } = [];
     public int LoadRepoInfoRefreshId { get; set; } = 0;
     public int LoadCommitsRefreshId { get; set; } = 0;
